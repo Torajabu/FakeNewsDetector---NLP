@@ -1,0 +1,94 @@
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer, HashingVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn import metrics
+import numpy as np
+import itertools
+import matplotlib.pyplot as plt
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+import re
+
+# Load the dataset
+news_data = pd.read_csv('fake-news/train.csv')
+
+# Drop rows with missing values
+news_data = news_data.dropna()
+
+# Reset index
+news_messages = news_data.copy()
+news_messages.reset_index(inplace=True)
+
+# Text preprocessing
+stemmer = PorterStemmer()
+processed_texts = []
+for i in range(0, len(news_messages)):
+    cleaned_text = re.sub('[^a-zA-Z]', ' ', news_messages['text'][i])
+    cleaned_text = cleaned_text.lower()
+    cleaned_text = cleaned_text.split()
+    
+    cleaned_text = [stemmer.stem(word) for word in cleaned_text if not word in stopwords.words('english')]
+    cleaned_text = ' '.join(cleaned_text)
+    processed_texts.append(cleaned_text)
+
+# TF-IDF Vectorization
+tfidf_vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1,3))
+text_features = tfidf_vectorizer.fit_transform(processed_texts).toarray()
+labels = news_messages['label']
+
+# Split the dataset into train and test sets
+X_train_data, X_test_data, y_train_labels, y_test_labels = train_test_split(text_features, labels, test_size=0.33, random_state=0)
+
+# Multinomial Naive Bayes Classifier
+news_classifier = MultinomialNB()
+news_classifier.fit(X_train_data, y_train_labels)
+predictions = news_classifier.predict(X_test_data)
+accuracy_score = metrics.accuracy_score(y_test_labels, predictions)
+print("Accuracy: %0.3f" % accuracy_score)
+
+# Confusion Matrix
+def plot_confusion_matrix(conf_matrix, class_labels, normalize=False, title='Confusion Matrix', colormap=plt.cm.Blues):
+    plt.imshow(conf_matrix, interpolation='nearest', cmap=colormap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(class_labels))
+    plt.xticks(tick_marks, class_labels, rotation=45)
+    plt.yticks(tick_marks, class_labels)
+
+    if normalize:
+        conf_matrix = conf_matrix.astype('float') / conf_matrix.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    threshold = conf_matrix.max() / 2.
+    for i, j in itertools.product(range(conf_matrix.shape[0]), range(conf_matrix.shape[1])):
+        plt.text(j, i, conf_matrix[i, j],
+                 horizontalalignment="center",
+                 color="white" if conf_matrix[i, j] > threshold else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+conf_matrix = metrics.confusion_matrix(y_test_labels, predictions)
+plot_confusion_matrix(conf_matrix, class_labels=['FAKE', 'REAL'])
+
+# Hashing Vectorizer
+hashing_vectorizer = HashingVectorizer(n_features=5000, non_negative=True)
+hashed_features = hashing_vectorizer.fit_transform(processed_texts).toarray()
+
+# Split the dataset into train and test sets
+X_train_hashed, X_test_hashed, y_train_hashed, y_test_hashed = train_test_split(hashed_features, labels, test_size=0.33, random_state=0)
+
+# Multinomial Naive Bayes Classifier with Hashing Vectorizer
+hashed_classifier = MultinomialNB()
+hashed_classifier.fit(X_train_hashed, y_train_hashed)
+hashed_predictions = hashed_classifier.predict(X_test_hashed)
+hashed_accuracy = metrics.accuracy_score(y_test_hashed, hashed_predictions)
+print("Accuracy with Hashing Vectorizer: %0.3f" % hashed_accuracy)
+
+# Confusion Matrix
+hashed_conf_matrix = metrics.confusion_matrix(y_test_hashed, hashed_predictions)
+plot_confusion_matrix(hashed_conf_matrix, class_labels=['FAKE', 'REAL'])
