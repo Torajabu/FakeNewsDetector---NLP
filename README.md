@@ -117,10 +117,6 @@ A confusion matrix visualization is generated to show the model's performance:
 
 The project is available at [https://github.com/Torajabu/FakeNewsDetector---NLP](https://github.com/Torajabu/FakeNewsDetector---NLP)
 
-## License
-
-[Add your license information here]
-
 ## Author
 
-[Add your information here]
+Torajabu
