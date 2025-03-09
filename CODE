@@ -1,94 +1,121 @@
 import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer, HashingVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn import metrics
 import numpy as np
-import itertools
 import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 import re
 
-# Load the dataset
-news_data = pd.read_csv('fake-news/train.csv')
+# Updated file paths
+train_path = "C:/CODING/WORKING/train.csv"
+test_path = "C:/CODING/WORKING/test.csv"
+# Changed output file name from submit.csv to output.csv
+output_path = "C:/CODING/WORKING/output.csv"
 
-# Drop rows with missing values
-news_data = news_data.dropna()
+# Load the datasets
+print("Loading datasets...")
+train_data = pd.read_csv(train_path)
+test_data = pd.read_csv(test_path)
 
-# Reset index
-news_messages = news_data.copy()
-news_messages.reset_index(inplace=True)
+# Check for missing values in text column and handle them
+print(f"Train data shape before cleaning: {train_data.shape}")
+train_data = train_data.dropna(subset=['text'])
+print(f"Train data shape after cleaning: {train_data.shape}")
 
-# Text preprocessing
+# Initialize the Porter Stemmer
 stemmer = PorterStemmer()
-processed_texts = []
-for i in range(0, len(news_messages)):
-    cleaned_text = re.sub('[^a-zA-Z]', ' ', news_messages['text'][i])
-    cleaned_text = cleaned_text.lower()
-    cleaned_text = cleaned_text.split()
-    
-    cleaned_text = [stemmer.stem(word) for word in cleaned_text if not word in stopwords.words('english')]
-    cleaned_text = ' '.join(cleaned_text)
-    processed_texts.append(cleaned_text)
+
+# Text preprocessing function
+def preprocess_text(text):
+    if isinstance(text, str):
+        # Remove non-alphabetic characters
+        cleaned_text = re.sub('[^a-zA-Z]', ' ', text)
+        # Convert to lowercase
+        cleaned_text = cleaned_text.lower()
+        # Split into words
+        cleaned_text = cleaned_text.split()
+        # Remove stopwords and stem words
+        cleaned_text = [stemmer.stem(word) for word in cleaned_text if word not in stopwords.words('english')]
+        # Join back into a string
+        cleaned_text = ' '.join(cleaned_text)
+        return cleaned_text
+    else:
+        return ""  # Return empty string for NaN values
+
+# Process training data
+print("Preprocessing training data...")
+train_processed_texts = train_data['text'].apply(preprocess_text)
 
 # TF-IDF Vectorization
+print("Vectorizing text data...")
 tfidf_vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1,3))
-text_features = tfidf_vectorizer.fit_transform(processed_texts).toarray()
-labels = news_messages['label']
+train_features = tfidf_vectorizer.fit_transform(train_processed_texts)
+train_labels = train_data['label']
 
-# Split the dataset into train and test sets
-X_train_data, X_test_data, y_train_labels, y_test_labels = train_test_split(text_features, labels, test_size=0.33, random_state=0)
+# Split for validation
+X_train, X_val, y_train, y_val = train_test_split(train_features, train_labels, test_size=0.2, random_state=42)
 
-# Multinomial Naive Bayes Classifier
-news_classifier = MultinomialNB()
-news_classifier.fit(X_train_data, y_train_labels)
-predictions = news_classifier.predict(X_test_data)
-accuracy_score = metrics.accuracy_score(y_test_labels, predictions)
-print("Accuracy: %0.3f" % accuracy_score)
+# Train the classifier
+print("Training model...")
+classifier = MultinomialNB()
+classifier.fit(X_train, y_train)
+
+# Validate the model
+val_predictions = classifier.predict(X_val)
+accuracy = metrics.accuracy_score(y_val, val_predictions)
+print(f"Validation accuracy: {accuracy:.4f}")
 
 # Confusion Matrix
-def plot_confusion_matrix(conf_matrix, class_labels, normalize=False, title='Confusion Matrix', colormap=plt.cm.Blues):
-    plt.imshow(conf_matrix, interpolation='nearest', cmap=colormap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marks = np.arange(len(class_labels))
-    plt.xticks(tick_marks, class_labels, rotation=45)
-    plt.yticks(tick_marks, class_labels)
+conf_matrix = metrics.confusion_matrix(y_val, val_predictions)
+print("Confusion matrix:")
+print(conf_matrix)
 
-    if normalize:
-        conf_matrix = conf_matrix.astype('float') / conf_matrix.sum(axis=1)[:, np.newaxis]
-        print("Normalized confusion matrix")
-    else:
-        print('Confusion matrix, without normalization')
+# Plot confusion matrix
+plt.figure(figsize=(8, 6))
+plt.imshow(conf_matrix, interpolation='nearest', cmap=plt.cm.Blues)
+plt.title('Confusion Matrix')
+plt.colorbar()
+class_labels = ['FAKE', 'REAL']
+tick_marks = np.arange(len(class_labels))
+plt.xticks(tick_marks, class_labels, rotation=45)
+plt.yticks(tick_marks, class_labels)
 
-    threshold = conf_matrix.max() / 2.
-    for i, j in itertools.product(range(conf_matrix.shape[0]), range(conf_matrix.shape[1])):
+threshold = conf_matrix.max() / 2.
+for i in range(conf_matrix.shape[0]):
+    for j in range(conf_matrix.shape[1]):
         plt.text(j, i, conf_matrix[i, j],
                  horizontalalignment="center",
                  color="white" if conf_matrix[i, j] > threshold else "black")
 
-    plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
+plt.tight_layout()
+plt.ylabel('True label')
+plt.xlabel('Predicted label')
+plt.savefig('C:/CODING/WORKING/confusion_matrix.png')
+plt.close()
 
-conf_matrix = metrics.confusion_matrix(y_test_labels, predictions)
-plot_confusion_matrix(conf_matrix, class_labels=['FAKE', 'REAL'])
+# Now retrain on full training data
+print("Retraining on full dataset...")
+classifier = MultinomialNB()
+classifier.fit(train_features, train_labels)
 
-# Hashing Vectorizer
-hashing_vectorizer = HashingVectorizer(n_features=5000, non_negative=True)
-hashed_features = hashing_vectorizer.fit_transform(processed_texts).toarray()
+# Process test data
+print("Preprocessing test data...")
+test_processed_texts = test_data['text'].fillna("").apply(preprocess_text)
+test_features = tfidf_vectorizer.transform(test_processed_texts)
 
-# Split the dataset into train and test sets
-X_train_hashed, X_test_hashed, y_train_hashed, y_test_hashed = train_test_split(hashed_features, labels, test_size=0.33, random_state=0)
+# Predict on test data
+print("Predicting on test data...")
+test_predictions = classifier.predict(test_features)
 
-# Multinomial Naive Bayes Classifier with Hashing Vectorizer
-hashed_classifier = MultinomialNB()
-hashed_classifier.fit(X_train_hashed, y_train_hashed)
-hashed_predictions = hashed_classifier.predict(X_test_hashed)
-hashed_accuracy = metrics.accuracy_score(y_test_hashed, hashed_predictions)
-print("Accuracy with Hashing Vectorizer: %0.3f" % hashed_accuracy)
+# Create output file
+print("Creating output file...")
+output = pd.DataFrame({
+    'id': test_data['id'],
+    'label': test_predictions
+})
+output.to_csv(output_path, index=False)
 
-# Confusion Matrix
-hashed_conf_matrix = metrics.confusion_matrix(y_test_hashed, hashed_predictions)
-plot_confusion_matrix(hashed_conf_matrix, class_labels=['FAKE', 'REAL'])
+print(f"Output file created at {output_path}")
