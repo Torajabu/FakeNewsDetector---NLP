@@ -9,10 +9,8 @@ from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 import re
 
-# Updated file paths
 train_path = "C:/CODING/WORKING/train.csv"
 test_path = "C:/CODING/WORKING/test.csv"
-# Changed output file name from submit.csv to output.csv
 output_path = "C:/CODING/WORKING/output.csv"
 
 # Load the datasets
